@@ -3,7 +3,12 @@ WORKDIR /app
 RUN apk add --no-cache git
 RUN git clone https://github.com/alam00000/bentopdf.git .
 RUN npm ci
+
+# La configuration pour le sous-dossier
 ENV BASE_URL=/pdf/
+# Le coupe-circuit qui désactive les tests SEO et le marketing
+ENV SIMPLE_MODE=true
+
 RUN npm run build
 
 FROM nginxinc/nginx-unprivileged:alpine
