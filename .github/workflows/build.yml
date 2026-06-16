@@ -1,0 +1,71 @@
+name: Build Custom BentoPDF
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  smart-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for new release
+        id: check
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/alam00000/bentopdf/releases/latest | jq -r .tag_name)
+          echo "Version officielle actuelle : $LATEST"
+
+          if [ -z "$LATEST" ] || [ "$LATEST" == "null" ]; then
+            echo "Erreur de l'API GitHub, annulation de l'opération."
+            echo "build=false" >> $GITHUB_ENV
+            exit 0
+          fi
+
+          if [ -f version.txt ]; then
+            KNOWN=$(cat version.txt)
+          else
+            KNOWN="none"
+          fi
+          echo "Dernière version compilée par notre usine : $KNOWN"
+
+          if [ "$LATEST" == "$KNOWN" ]; then
+            echo "Le système est déjà à jour. Arrêt immédiat de la machine."
+            echo "build=false" >> $GITHUB_ENV
+          else
+            echo "Nouvelle version détectée ! Déclenchement de la compilation."
+            echo "build=true" >> $GITHUB_ENV
+            echo "$LATEST" > version.txt
+          fi
+
+      - name: Save new version to memory
+        if: env.build == 'true'
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git add version.txt
+          git commit -m "Mise à jour automatique vers la release officielle"
+          git push
+
+      - name: Log in to GitHub Container Registry
+        if: env.build == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        if: env.build == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          # La variable magique qui s'adapte au nom de ton repo (bentopdf-subfolder)
+          tags: ghcr.io/${{ github.repository }}:latest
